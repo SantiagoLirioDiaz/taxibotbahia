@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # MongoDB
+  mongodb:
+    image: mongo:4.4
+    container_name: taxibot-mongodb
+    restart: always
+    environment:
+      - MONGO_INITDB_DATABASE=taxibotbahia
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - taxibot-network
+    ports:
+      - "27017:27017"
+
+  # Backend API
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: taxibot-backend
+    restart: always
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=taxibotbahia
+      - CORS_ORIGINS=*
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - JWT_SECRET=${JWT_SECRET:-taxibot-secret-change-me}
+    depends_on:
+      - mongodb
+    networks:
+      - taxibot-network
+    ports:
+      - "8001:8001"
+
+  # Bot de Telegram
+  telegram-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: taxibot-telegram
+    restart: always
+    command: python telegram_bot/bot.py
+    environment:
+      - API_URL=http://backend:8001/api
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+    depends_on:
+      - backend
+    networks:
+      - taxibot-network
+
+  # Frontend + Nginx
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: taxibot-frontend
+    restart: always
+    depends_on:
+      - backend
+    networks:
+      - taxibot-network
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
+  # Certbot para SSL (opcional)
+  certbot:
+    image: certbot/certbot
+    container_name: taxibot-certbot
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  taxibot-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  certbot_certs:
+  certbot_www:
