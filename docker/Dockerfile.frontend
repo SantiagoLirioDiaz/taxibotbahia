@@ -1,27 +1,32 @@
 # Dockerfile para TaxiBotBahia Frontend
-FROM node:18-alpine as builder
+# ====== BUILD ======
+FROM node:20 as builder
 
 WORKDIR /app
 
-# Copiar package files
-COPY frontend/package.json frontend/yarn.lock ./
+# Copiar package.json
+COPY frontend/package.json ./
 
-# Instalar dependencias
-RUN yarn install
+# Instalar dependencias necesarias para compilar
+RUN apt-get update && apt-get install -y python3 make g++
 
-# Copiar código
+# Instalar dependencias con npm
+RUN npm install
+
+# Copiar el resto del código
 COPY frontend/ .
 
-# Build
-RUN yarn build
+# Build del frontend
+RUN npm run build
 
-# Imagen final con Nginx
+
+# ====== PRODUCCIÓN ======
 FROM nginx:alpine
 
-# Copiar build
+# Copiar build al nginx
 COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copiar configuración de Nginx
+# Config nginx
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80 443
